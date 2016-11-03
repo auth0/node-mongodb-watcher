@@ -30,7 +30,7 @@ describe('long cursors', function () {
   it('should emit an event if query is going to return more than 100 documents', function(done) {
     watcher.once('long cursor', (data) => {
       assert.equal(data.collection, 'longcursors');
-      assert.equal(data.documents.length, 500);
+      assert.equal(data.count, 500);
       assert.equal(data.cmd.query.notFoo.$exists, false);
       assert.include(data.stack, 'test/watch_longcursors.tests.js');
       done();

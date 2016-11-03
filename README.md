@@ -32,11 +32,12 @@ db.collection('apples').find().toArray((apples) => {
 - `long cursor`: this event is emitted when a cursor is enumerated (.toArray) returning an array of documents with more than `longCursorThreshold` (defaults 100).
 - `long insert`: this event is emitted when calling `.insert([])` with an array with more than `insertThreshold` (defaults 100) documents.
 
-The data emitted in the event contains:
+The data emitted in the events:
 
 - `collection`: the name of the collection.
-- `documents`: an array of documents.
+- `count`: the number of documents returned or inserted.
 - `data.stack`: an stack trace of to identify where the call was made.
+- `cmd`: just for `long cursor`, it contains the `query`, `limit`, `skip`, `readPreference`, `slaveOk`, etc.
 
 More events are welcome.
 

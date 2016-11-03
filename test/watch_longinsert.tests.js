@@ -26,7 +26,7 @@ describe('long insert', function () {
   it('should emit an event when inserting more than 100 documents', function(done) {
     watcher.once('long insert', (data) => {
       assert.equal(data.collection, 'longinsert');
-      assert.equal(data.documents.length, 1000);
+      assert.equal(data.count, 1000);
       assert.include(data.stack, 'test/watch_longinsert.tests.js');
       done();
     });

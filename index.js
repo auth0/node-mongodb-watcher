@@ -29,7 +29,7 @@ class MongoWatcher extends EventEmitter {
               if (documents && documents.length > self._params.longCursorThreshold) {
                 self.emit('long cursor', {
                   collection: newCursor.namespace.collection,
-                  documents:  documents,
+                  count:      documents.length,
                   cmd:        newCursor.cmd,
                   stack:      stack.split('\n').slice(2).join('\n')
                 });
@@ -52,7 +52,7 @@ class MongoWatcher extends EventEmitter {
             if(documents.length > self._params.longInsertThreshold) {
               self.emit('long insert', {
                 collection: collectionInstance.collectionName,
-                documents,
+                count: documents.length,
                 stack: new Error().stack.split('\n').slice(2).join('\n')
               });
             }
