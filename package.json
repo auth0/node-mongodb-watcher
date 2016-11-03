@@ -1,0 +1,21 @@
+{
+  "name": "mongodb-watcher",
+  "description": "Watch mongodb cursors on a db connections.",
+  "version": "0.0.0",
+  "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
+  "repository": {
+    "url": "git://github.com/auth0/node-mongodb-watcher.git"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "async": "^2.1.2",
+    "chai": "~2.3.0",
+    "lodash": "^4.16.6",
+    "mocha": "~2.2.5",
+    "mongodb": "^2.2.11"
+  }
+}
