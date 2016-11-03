@@ -29,8 +29,9 @@ class MongoWatcher extends EventEmitter {
               if (documents && documents.length > self._params.longCursorThreshold) {
                 self.emit('long cursor', {
                   collection: newCursor.namespace.collection,
-                  documents: documents,
-                  stack: stack.split('\n').slice(2).join('\n')
+                  documents:  documents,
+                  cmd:        newCursor.cmd,
+                  stack:      stack.split('\n').slice(2).join('\n')
                 });
               }
               return callback(null, documents);

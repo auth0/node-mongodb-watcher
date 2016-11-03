@@ -31,10 +31,11 @@ describe('long cursors', function () {
     watcher.once('long cursor', (data) => {
       assert.equal(data.collection, 'longcursors');
       assert.equal(data.documents.length, 500);
+      assert.equal(data.cmd.query.notFoo.$exists, false);
       assert.include(data.stack, 'test/watch_longcursors.tests.js');
       done();
     });
-    collection.find({}).limit(500).toArray(_.noop);
+    collection.find({ notFoo: { $exists: false} }).limit(500).toArray(_.noop);
   });
 
   it('should not emit an event if query is going to return less than 100 documents', function(done) {
