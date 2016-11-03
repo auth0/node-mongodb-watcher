@@ -1,7 +1,7 @@
 {
   "name": "mongodb-watcher",
   "description": "Watch mongodb cursors on a db connections.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "José F. Romaniello <jfromaniello@gmail.com> (http://joseoncode.com)",
   "repository": {
     "url": "git://github.com/auth0/node-mongodb-watcher.git"
