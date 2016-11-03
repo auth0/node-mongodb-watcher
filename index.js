@@ -43,26 +43,42 @@ class MongoWatcher extends EventEmitter {
       };
     })(db.s.topology.cursor);
 
-    db.collection = (function(collection){
-      return function () {
-        const collectionInstance = collection.apply(db, arguments);
-        collectionInstance.insertMany = (function(insertMany) {
-          return function(documents) {
-            const insertResult = insertMany.apply(collectionInstance, arguments);
-            if(documents.length > self._params.longInsertThreshold) {
-              self.emit('long insert', {
-                collection: collectionInstance.collectionName,
-                count: documents.length,
-                stack: new Error().stack.split('\n').slice(2).join('\n')
-              });
-            }
-            return insertResult;
-          };
-        })(collectionInstance.insertMany);
+    function patchCollection(collectionInstance) {
+      collectionInstance.insertMany = (function(insertMany) {
+        return function(documents) {
+          const insertResult = insertMany.apply(collectionInstance, arguments);
+          if(documents.length > self._params.longInsertThreshold) {
+            self.emit('long insert', {
+              collection: collectionInstance.collectionName,
+              count: documents.length,
+              stack: new Error().stack.split('\n').slice(2).join('\n')
+            });
+          }
+          return insertResult;
+        };
+      })(collectionInstance.insertMany);
 
-        return collectionInstance;
+      return collectionInstance;
+    }
+
+    db.collection = (function(collection){
+      return function (name, options, callback) {
+        if(typeof options === "function") {
+          callback = options;
+          options = {};
+        }
+
+        if (typeof callback === 'undefined') {
+          return patchCollection(collection(name, options));
+        }
+
+        collection(name, options, (err, collectionInstance) => {
+          if (err) { return callback(err); }
+          if (!collectionInstance) { return callback(); }
+          callback(null, patchCollection(collectionInstance));
+        });
       };
-    })(db.collection);
+    })(db.collection.bind(db));
 
   }
 
