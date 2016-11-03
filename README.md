@@ -16,7 +16,7 @@ const watcher = new MongoWatcher(db, {
 });
 
 watcher.on('long cursor', (data) => {
-  logger.error(`Detected bad query over ${data.collection} returning ${data.documents.length} documents. \n ${data.stack}`);
+  logger.error(`Detected bad query over ${data.collection} returning ${data.count} documents. \n ${data.stack}`);
 });
 
 db.collection('apples').find().toArray((apples) => {
