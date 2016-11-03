@@ -24,22 +24,17 @@ class MongoWatcher extends EventEmitter {
           return function(callback) {
             const stack = new Error().stack;
 
-            //force a count if someone is watching this event
-            if (self.listenerCount('long cursor')) {
-              return toArray((err, documents) => {
-                if (err) { return callback(err); }
-                if (documents && documents.length > self._params.longCursorThreshold) {
-                  self.emit('long cursor', {
-                    collection: newCursor.namespace.collection,
-                    documents: documents,
-                    stack: stack.split('\n').slice(2).join('\n')
-                  });
-                }
-                return callback(null, documents);
-              });
-            }
-
-            return toArray.apply(newCursor, arguments);
+            return toArray((err, documents) => {
+              if (err) { return callback(err); }
+              if (documents && documents.length > self._params.longCursorThreshold) {
+                self.emit('long cursor', {
+                  collection: newCursor.namespace.collection,
+                  documents: documents,
+                  stack: stack.split('\n').slice(2).join('\n')
+                });
+              }
+              return callback(null, documents);
+            });
           };
         })(newCursor.toArray.bind(newCursor));
 
