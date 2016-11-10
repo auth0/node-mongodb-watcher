@@ -4,8 +4,11 @@ const EventEmitter = require('events').EventEmitter;
 
 const defaults = {
   longCursorThreshold: 100,
-  longInsertThreshold: 100
+  longInsertThreshold: 100,
+  bigInsertThreshold:  1024 * 30
 };
+
+const sizeOf = require('object-sizeof');
 
 class MongoWatcher extends EventEmitter {
 
@@ -44,6 +47,20 @@ class MongoWatcher extends EventEmitter {
     })(db.s.topology.cursor);
 
     function patchCollection(collectionInstance) {
+
+      function checkDocumentSize(d) {
+        const size = sizeOf(d);
+        if (size < self._params.bigInsertThreshold) {
+          return;
+        }
+        self.emit('big insert', {
+          collection: collectionInstance.collectionName,
+          size: size,
+          stack: new Error().stack.split('\n').slice(2).join('\n'),
+          documentId: d._id
+        });
+      }
+
       collectionInstance.insertMany = (function(insertMany) {
         return function(documents) {
           const insertResult = insertMany.apply(collectionInstance, arguments);
@@ -54,9 +71,18 @@ class MongoWatcher extends EventEmitter {
               stack: new Error().stack.split('\n').slice(2).join('\n')
             });
           }
+          documents.forEach(checkDocumentSize);
           return insertResult;
         };
       })(collectionInstance.insertMany);
+
+      collectionInstance.save = (function(save) {
+        return function(document) {
+          const saveResult = save.apply(collectionInstance, arguments);
+          checkDocumentSize(document);
+          return saveResult;
+        };
+      })(collectionInstance.save);
 
       return collectionInstance;
     }
