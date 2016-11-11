@@ -5,7 +5,7 @@ const assert       = require('chai').assert;
 const randomstring = require('randomstring');
 const sizeOf       = require('object-sizeof');
 
-describe('large.document.inserted', function () {
+describe('large.document.insert', function () {
   var db, collection, watcher;
 
   before(function(done) {
@@ -30,7 +30,7 @@ describe('large.document.inserted', function () {
       test: _.range(1000).map(() => ({ test: randomstring.generate(50) }))
     };
 
-    watcher.once('large.document.inserted', (data) => {
+    watcher.once('large.document.insert', (data) => {
       assert.isOk(badDoc._id);
       assert.equal(data.collection, 'biginsert');
       assert.equal(data.size, sizeOf(badDoc));
@@ -47,7 +47,7 @@ describe('large.document.inserted', function () {
       test: _.range(1000).map(() => ({ test: randomstring.generate(50) }))
     };
 
-    watcher.once('large.document.inserted', (data) => {
+    watcher.once('large.document.insert', (data) => {
       assert.isOk(badDoc._id);
       assert.equal(data.collection, 'biginsert');
       assert.equal(data.size, sizeOf(badDoc));
@@ -65,7 +65,7 @@ describe('large.document.inserted', function () {
     };
 
     var emitted = false;
-    watcher.once('large.document.inserted', () => {
+    watcher.once('large.document.insert', () => {
       emitted = true;
       done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
     });
@@ -83,7 +83,7 @@ describe('large.document.inserted', function () {
     };
 
     var emitted = false;
-    watcher.once('large.document.inserted', () => {
+    watcher.once('large.document.insert', () => {
       emitted = true;
       done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
     });

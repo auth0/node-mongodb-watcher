@@ -4,8 +4,8 @@ const EventEmitter = require('events').EventEmitter;
 
 const defaults = {
   longCursorThreshold: 100,
-  longInsertThreshold: 100,
-  bigInsertThreshold:  1024 * 30
+  largeInsertThreshold: 1024 * 30,
+  largeFetchThreshold: 1024 * 30
 };
 
 const sizeOf = require('object-sizeof');
@@ -29,9 +29,31 @@ class MongoWatcher extends EventEmitter {
 
     const self = this;
 
+    function checkDocumentFetch(collection, stack, doc) {
+      if (!doc) { return; }
+      const size = sizeOf(doc);
+      if (size > self._params.largeFetchThreshold) {
+        self.emit('large.document.fetch', {
+          collection, size, stack,
+          documentId: doc._id
+        });
+      }
+    }
+
     db.s.topology.cursor = (function(createCursor) {
       return function () {
         const newCursor = createCursor.apply(this, arguments);
+
+        newCursor.next = (function(next) {
+          return function(callback) {
+            const stack = getStackTrace();
+            return next((err, doc) => {
+              if (err) { return callback(err); }
+              checkDocumentFetch(newCursor.namespace.collection, stack, doc);
+              callback(null, doc);
+            });
+          };
+        })(newCursor.next.bind(newCursor));
 
         newCursor.toArray = (function(toArray) {
           return function(callback) {
@@ -40,11 +62,16 @@ class MongoWatcher extends EventEmitter {
             return toArray((err, documents) => {
               if (err) { return callback(err); }
               if (documents && documents.length > self._params.longCursorThreshold) {
-                self.emit('long.cursor.enumerated', {
+                self.emit('long.cursor.enumeration', {
                   collection: newCursor.namespace.collection,
                   count:      documents.length,
                   cmd:        newCursor.cmd,
-                  stack:      stack
+                  stack
+                });
+              }
+              if (documents) {
+                documents.forEach(doc => {
+                  checkDocumentFetch(newCursor.namespace.collection, stack, doc);
                 });
               }
               return callback(null, documents);
@@ -57,15 +84,14 @@ class MongoWatcher extends EventEmitter {
     })(db.s.topology.cursor);
 
     function patchCollection(collectionInstance) {
-
-      function checkDocumentSize(d) {
+      function checkLargeDocInsert(d) {
         const size = sizeOf(d);
-        if (size < self._params.bigInsertThreshold) {
+        if (size < self._params.largeInsertThreshold) {
           return;
         }
-        self.emit('large.document.inserted', {
+        self.emit('large.document.insert', {
+          size,
           collection: collectionInstance.collectionName,
-          size: size,
           stack: getStackTrace(),
           documentId: d._id
         });
@@ -74,7 +100,7 @@ class MongoWatcher extends EventEmitter {
       collectionInstance.insertMany = (function(insertMany) {
         return function(documents) {
           const insertResult = insertMany.apply(collectionInstance, arguments);
-          documents.forEach(checkDocumentSize);
+          documents.forEach(checkLargeDocInsert);
           return insertResult;
         };
       })(collectionInstance.insertMany);
@@ -82,7 +108,7 @@ class MongoWatcher extends EventEmitter {
       collectionInstance.save = (function(save) {
         return function(document) {
           const saveResult = save.apply(collectionInstance, arguments);
-          checkDocumentSize(document);
+          checkLargeDocInsert(document);
           return saveResult;
         };
       })(collectionInstance.save);
