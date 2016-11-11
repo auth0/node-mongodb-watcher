@@ -47,11 +47,11 @@ describe('large.document.fetch', function () {
       assert.equal(eventData.collection, 'large_doc_fetch');
       assert.equal(eventData.size, sizeOf(doc));
       assert.equal(eventData.documentId, doc._id);
+      assert.equal(eventData.cmd.query._id, _id);
       assert.include(eventData.stack, __filename);
       done();
     });
   });
-
 
   it('should emit an event when retrieving a big document with find', function(done) {
     var eventData;

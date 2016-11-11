@@ -29,12 +29,12 @@ class MongoWatcher extends EventEmitter {
 
     const self = this;
 
-    function checkDocumentFetch(collection, stack, doc) {
+    function checkDocumentFetch(collection, stack, cmd, doc) {
       if (!doc) { return; }
       const size = sizeOf(doc);
       if (size > self._params.largeFetchThreshold) {
         self.emit('large.document.fetch', {
-          collection, size, stack,
+          collection, size, stack, cmd,
           documentId: doc._id
         });
       }
@@ -53,7 +53,7 @@ class MongoWatcher extends EventEmitter {
             const stack = getStackTrace();
             return next((err, doc) => {
               if (err) { return callback(err); }
-              checkDocumentFetch(collectionName, stack, doc);
+              checkDocumentFetch(collectionName, stack, newCursor.cmd, doc);
               callback(null, doc);
             });
           };
@@ -75,7 +75,7 @@ class MongoWatcher extends EventEmitter {
               }
               if (documents) {
                 documents.forEach(doc => {
-                  checkDocumentFetch(collectionName, stack, doc);
+                  checkDocumentFetch(collectionName, stack, newCursor.cmd, doc);
                 });
               }
               return callback(null, documents);
