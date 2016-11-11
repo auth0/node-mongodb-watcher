@@ -4,7 +4,7 @@ const async        = require('async');
 const MongoWatcher = require('../');
 const assert       = require('chai').assert;
 
-describe('long cursors', function () {
+describe('long.cursor.enumerated', function () {
   var db, collection, watcher;
 
   before(function(done) {
@@ -28,18 +28,18 @@ describe('long cursors', function () {
   });
 
   it('should emit an event if query is going to return more than 100 documents', function(done) {
-    watcher.once('long cursor', (data) => {
+    watcher.once('long.cursor.enumerated', (data) => {
       assert.equal(data.collection, 'longcursors');
       assert.equal(data.count, 500);
       assert.equal(data.cmd.query.notFoo.$exists, false);
-      assert.include(data.stack, 'test/watch_longcursors.tests.js');
+      assert.include(data.stack, __filename);
       done();
     });
     collection.find({ notFoo: { $exists: false} }).limit(500).toArray(_.noop);
   });
 
   it('should not emit an event if query is going to return less than 100 documents', function(done) {
-    watcher.once('long cursor', () => {
+    watcher.once('long.cursor.enumerated', () => {
       done(new Error('this should not be called'));
     });
     collection.find({}).limit(50).toArray(done);

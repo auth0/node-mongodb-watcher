@@ -5,7 +5,7 @@ const assert       = require('chai').assert;
 const randomstring = require('randomstring');
 const sizeOf       = require('object-sizeof');
 
-describe('big insert', function () {
+describe('large.document.inserted', function () {
   var db, collection, watcher;
 
   before(function(done) {
@@ -30,12 +30,12 @@ describe('big insert', function () {
       test: _.range(1000).map(() => ({ test: randomstring.generate(50) }))
     };
 
-    watcher.once('big insert', (data) => {
+    watcher.once('large.document.inserted', (data) => {
       assert.isOk(badDoc._id);
       assert.equal(data.collection, 'biginsert');
       assert.equal(data.size, sizeOf(badDoc));
       assert.equal(data.documentId, badDoc._id);
-      assert.include(data.stack, 'test/watch_biginsert.tests.js');
+      assert.include(data.stack, __filename);
       done();
     });
 
@@ -47,12 +47,12 @@ describe('big insert', function () {
       test: _.range(1000).map(() => ({ test: randomstring.generate(50) }))
     };
 
-    watcher.once('big insert', (data) => {
+    watcher.once('large.document.inserted', (data) => {
       assert.isOk(badDoc._id);
       assert.equal(data.collection, 'biginsert');
       assert.equal(data.size, sizeOf(badDoc));
       assert.equal(data.documentId, badDoc._id);
-      assert.include(data.stack, 'test/watch_biginsert.tests.js');
+      assert.include(data.stack, __filename);
       done();
     });
 
@@ -65,7 +65,7 @@ describe('big insert', function () {
     };
 
     var emitted = false;
-    watcher.once('big insert', () => {
+    watcher.once('large.document.inserted', () => {
       emitted = true;
       done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
     });
@@ -83,7 +83,7 @@ describe('big insert', function () {
     };
 
     var emitted = false;
-    watcher.once('big insert', () => {
+    watcher.once('large.document.inserted', () => {
       emitted = true;
       done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
     });

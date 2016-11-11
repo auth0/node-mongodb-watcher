@@ -10,6 +10,16 @@ const defaults = {
 
 const sizeOf = require('object-sizeof');
 
+function getStackTrace(){
+  return new Error().stack.split('\n').reduce((result, current) => {
+    if (current.match(/mongodb\-watcher\/index/) ||
+        current.match(/^Error$/)) {
+      return result;
+    }
+    return result + current + '\n';
+  }, '');
+}
+
 class MongoWatcher extends EventEmitter {
 
   constructor(db, params) {
@@ -25,16 +35,16 @@ class MongoWatcher extends EventEmitter {
 
         newCursor.toArray = (function(toArray) {
           return function(callback) {
-            const stack = new Error().stack;
+            const stack = getStackTrace();
 
             return toArray((err, documents) => {
               if (err) { return callback(err); }
               if (documents && documents.length > self._params.longCursorThreshold) {
-                self.emit('long cursor', {
+                self.emit('long.cursor.enumerated', {
                   collection: newCursor.namespace.collection,
                   count:      documents.length,
                   cmd:        newCursor.cmd,
-                  stack:      stack.split('\n').slice(2).join('\n')
+                  stack:      stack
                 });
               }
               return callback(null, documents);
@@ -53,10 +63,10 @@ class MongoWatcher extends EventEmitter {
         if (size < self._params.bigInsertThreshold) {
           return;
         }
-        self.emit('big insert', {
+        self.emit('large.document.inserted', {
           collection: collectionInstance.collectionName,
           size: size,
-          stack: new Error().stack.split('\n').slice(2).join('\n'),
+          stack: getStackTrace(),
           documentId: d._id
         });
       }
@@ -64,13 +74,6 @@ class MongoWatcher extends EventEmitter {
       collectionInstance.insertMany = (function(insertMany) {
         return function(documents) {
           const insertResult = insertMany.apply(collectionInstance, arguments);
-          if(documents.length > self._params.longInsertThreshold) {
-            self.emit('long insert', {
-              collection: collectionInstance.collectionName,
-              count: documents.length,
-              stack: new Error().stack.split('\n').slice(2).join('\n')
-            });
-          }
           documents.forEach(checkDocumentSize);
           return insertResult;
         };
