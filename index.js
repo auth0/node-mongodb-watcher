@@ -44,12 +44,16 @@ class MongoWatcher extends EventEmitter {
       return function () {
         const newCursor = createCursor.apply(this, arguments);
 
+        const collectionName = newCursor.namespace &&
+                               newCursor.namespace.collection ||
+                               '';
+
         newCursor.next = (function(next) {
           return function(callback) {
             const stack = getStackTrace();
             return next((err, doc) => {
               if (err) { return callback(err); }
-              checkDocumentFetch(newCursor.namespace.collection, stack, doc);
+              checkDocumentFetch(collectionName, stack, doc);
               callback(null, doc);
             });
           };
@@ -63,7 +67,7 @@ class MongoWatcher extends EventEmitter {
               if (err) { return callback(err); }
               if (documents && documents.length > self._params.longCursorThreshold) {
                 self.emit('long.cursor.enumeration', {
-                  collection: newCursor.namespace.collection,
+                  collection: collectionName,
                   count:      documents.length,
                   cmd:        newCursor.cmd,
                   stack
@@ -71,7 +75,7 @@ class MongoWatcher extends EventEmitter {
               }
               if (documents) {
                 documents.forEach(doc => {
-                  checkDocumentFetch(newCursor.namespace.collection, stack, doc);
+                  checkDocumentFetch(collectionName, stack, doc);
                 });
               }
               return callback(null, documents);
