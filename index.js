@@ -10,8 +10,22 @@ const defaults = {
 
 const sizeOf = require('object-sizeof');
 
-function getStackTrace(){
-  return new Error().stack.split('\n').reduce((result, current) => {
+/**
+ * This is a workaround to this performance issue when accessing the stack:
+ * https://bugs.chromium.org/p/v8/issues/detail?id=5962
+ *
+ * This will first capture the stacktrace by creating an error, the returned
+ * function will return the proper formatted stack trace.
+ *
+ */
+function captureStackTrace(){
+  const error = new Error();
+
+  return () => formatStackTrace(error.stack);
+}
+
+function formatStackTrace(stackTrace){
+  return stackTrace.split('\n').reduce((result, current) => {
     if (current.match(/mongodb\-watcher\/index/) ||
         current.match(/^Error$/)) {
       return result;
@@ -29,12 +43,13 @@ class MongoWatcher extends EventEmitter {
 
     const self = this;
 
-    function checkDocumentFetch(collection, stack, cmd, doc) {
+    function checkDocumentFetch(collection, getFormattedStack, cmd, doc) {
       if (!doc) { return; }
       const size = sizeOf(doc);
       if (size > self._params.largeFetchThreshold) {
         self.emit('large.document.fetch', {
-          collection, size, stack, cmd,
+          collection, size, cmd,
+          stack: getFormattedStack(),
           documentId: doc._id
         });
       }
@@ -50,10 +65,10 @@ class MongoWatcher extends EventEmitter {
 
         newCursor.next = (function(next) {
           return function(callback) {
-            const stack = getStackTrace();
+            const getFormattedStack = captureStackTrace();
             return next((err, doc) => {
               if (err) { return callback(err); }
-              checkDocumentFetch(collectionName, stack, newCursor.cmd, doc);
+              checkDocumentFetch(collectionName, getFormattedStack, newCursor.cmd, doc);
               callback(null, doc);
             });
           };
@@ -61,7 +76,7 @@ class MongoWatcher extends EventEmitter {
 
         newCursor.toArray = (function(toArray) {
           return function(callback) {
-            const stack = getStackTrace();
+            const getFormattedStack = captureStackTrace();
 
             return toArray((err, documents) => {
               if (err) { return callback(err); }
@@ -70,12 +85,12 @@ class MongoWatcher extends EventEmitter {
                   collection: collectionName,
                   count:      documents.length,
                   cmd:        newCursor.cmd,
-                  stack
+                  stack:      getFormattedStack()
                 });
               }
               if (documents) {
                 documents.forEach(doc => {
-                  checkDocumentFetch(collectionName, stack, newCursor.cmd, doc);
+                  checkDocumentFetch(collectionName, getFormattedStack, newCursor.cmd, doc);
                 });
               }
               return callback(null, documents);
@@ -93,10 +108,11 @@ class MongoWatcher extends EventEmitter {
         if (size < self._params.largeInsertThreshold) {
           return;
         }
+        const getFormattedStack = captureStackTrace();
         self.emit('large.document.insert', {
           size,
           collection: collectionInstance.collectionName,
-          stack: getStackTrace(),
+          stack: getFormattedStack(),
           documentId: d._id
         });
       }
