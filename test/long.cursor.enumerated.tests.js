@@ -3,7 +3,7 @@ const async        = require('async');
 const MongoWatcher = require('../');
 const assert       = require('chai').assert;
 
-describe('long.cursor.enumeration', function () {
+describe.only('long.cursor.enumeration', function () {
   var db, collection, watcher;
 
   function setupDb(cb) {
@@ -28,7 +28,7 @@ describe('long.cursor.enumeration', function () {
       watcher.removeAllListeners();
     }
   };
-  const cleanCollection = done => collection.remove({}, done);
+  const cleanCollection = done => { collection.remove({}, done) };
   const insertDocs = howMany => cb => collection.insert(new Array(howMany).fill().map(_ => ({ test: 't' })), cb);
 
   before(setupDb);
