@@ -4,20 +4,64 @@ const EventEmitter = require('events').EventEmitter;
 
 const defaults = {
   longCursorThreshold: 100,
+  longCursorCheckInterval: 1,
   largeInsertThreshold: 1024 * 30,
-  largeFetchThreshold: 1024 * 30
+  largeInsertCheckInterval: 1,
+  largeFetchThreshold: 1024 * 30,
+  largeFetchCheckInterval: 1
 };
 
 const sizeOf = require('object-sizeof');
 
-function getStackTrace(){
-  return new Error().stack.split('\n').reduce((result, current) => {
+/**
+ * This is a workaround to this performance issue when accessing the stack:
+ * https://bugs.chromium.org/p/v8/issues/detail?id=5962
+ *
+ * This will first capture the stacktrace by creating an error, the returned
+ * function will return the proper formatted stack trace.
+ *
+ */
+function captureStackTrace(){
+  const error = new Error();
+
+  return function() {
+    return formatStackTrace(error.stack);
+  }
+}
+
+function formatStackTrace(stackTrace){
+  return stackTrace.split('\n').reduce((result, current) => {
     if (current.match(/mongodb\-watcher\/index/) ||
         current.match(/^Error$/)) {
       return result;
     }
     return result + current + '\n';
   }, '');
+}
+
+/**
+ * This function creates a sequence generator-like where the returned function will result on "true" at the
+ * beginning of every interval of calls, false in the rest of cases.
+ * The caller should take a sample when "true" is returned
+ *
+ * @param {Number} interval Defines the interval for the sampling
+ * For example:
+ *   - 1:  Every call to "shouldRunSample" it would return true.
+ *   - 2:  Every 2 calls to "shouldRunSample" it would return true for one.
+ *   - 10: Every 10 calls to "shouldRunSample" it would return true for one.
+ */
+function createSampling(interval) {
+  if (!Number.isSafeInteger(interval) || interval <= 0) {
+    throw new TypeError('Interval must be a positive save integer, found: ' + interval);
+  }
+
+  var execCount = 0;
+
+  return function shouldRunSample() {
+    execCount = execCount === interval ? 1 : execCount + 1;
+
+    return execCount === 1;
+  }
 }
 
 class MongoWatcher extends EventEmitter {
@@ -27,14 +71,19 @@ class MongoWatcher extends EventEmitter {
 
     this._params = Object.assign({}, defaults, params);
 
+    const shouldCheckForLongCursor = createSampling(this._params.longCursorCheckInterval);
+    const shouldCheckForLargeInsert = createSampling(this._params.largeInsertCheckInterval);
+    const shouldCheckForLargeFetch = createSampling(this._params.largeFetchCheckInterval);
+
     const self = this;
 
-    function checkDocumentFetch(collection, stack, cmd, doc) {
+    function checkDocumentFetch(collection, getFormattedStack, cmd, doc) {
       if (!doc) { return; }
       const size = sizeOf(doc);
       if (size > self._params.largeFetchThreshold) {
         self.emit('large.document.fetch', {
-          collection, size, stack, cmd,
+          collection, size, cmd,
+          stack: getFormattedStack(),
           documentId: doc._id
         });
       }
@@ -48,12 +97,17 @@ class MongoWatcher extends EventEmitter {
                                newCursor.namespace.collection ||
                                '';
 
+
         newCursor.next = (function(next) {
           return function(callback) {
-            const stack = getStackTrace();
+            if (!shouldCheckForLargeFetch()) {
+              return next(callback);
+            }
+
+            const getFormattedStack = captureStackTrace();
             return next((err, doc) => {
               if (err) { return callback(err); }
-              checkDocumentFetch(collectionName, stack, newCursor.cmd, doc);
+              checkDocumentFetch(collectionName, getFormattedStack, newCursor.cmd, doc);
               callback(null, doc);
             });
           };
@@ -61,21 +115,34 @@ class MongoWatcher extends EventEmitter {
 
         newCursor.toArray = (function(toArray) {
           return function(callback) {
-            const stack = getStackTrace();
+            const runLongCursorCheck = shouldCheckForLongCursor();
+            var runLargeFetchCheck = shouldCheckForLargeFetch();
+            const shouldCheckAnything = runLongCursorCheck || runLargeFetchCheck;
+
+            if (!shouldCheckAnything) {
+              return toArray(callback);
+            }
+
+            const getFormattedStack = captureStackTrace();
 
             return toArray((err, documents) => {
               if (err) { return callback(err); }
-              if (documents && documents.length > self._params.longCursorThreshold) {
-                self.emit('long.cursor.enumeration', {
-                  collection: collectionName,
-                  count:      documents.length,
-                  cmd:        newCursor.cmd,
-                  stack
-                });
-              }
               if (documents) {
-                documents.forEach(doc => {
-                  checkDocumentFetch(collectionName, stack, newCursor.cmd, doc);
+                if (runLongCursorCheck && documents.length > self._params.longCursorThreshold) {
+                  self.emit('long.cursor.enumeration', {
+                    collection: collectionName,
+                    count:      documents.length,
+                    cmd:        newCursor.cmd,
+                    stack:      getFormattedStack()
+                  });
+                }
+                documents.forEach((doc, index) => {
+                  if (runLargeFetchCheck) {
+                    checkDocumentFetch(collectionName, getFormattedStack, newCursor.cmd, doc);
+                  }
+                  if (index < documents.length - 1) {
+                    runLargeFetchCheck = shouldCheckForLargeFetch();
+                  }
                 });
               }
               return callback(null, documents);
@@ -93,18 +160,24 @@ class MongoWatcher extends EventEmitter {
         if (size < self._params.largeInsertThreshold) {
           return;
         }
+        const getFormattedStack = captureStackTrace();
         self.emit('large.document.insert', {
           size,
           collection: collectionInstance.collectionName,
-          stack: getStackTrace(),
+          stack: getFormattedStack(),
           documentId: d._id
         });
       }
 
       collectionInstance.insertMany = (function(insertMany) {
+
         return function(documents) {
           const insertResult = insertMany.apply(collectionInstance, arguments);
-          documents.forEach(checkLargeDocInsert);
+          documents.forEach(doc => {
+            if (shouldCheckForLargeInsert()) {
+              checkLargeDocInsert(doc);
+            }
+          });
           return insertResult;
         };
       })(collectionInstance.insertMany);
@@ -112,7 +185,9 @@ class MongoWatcher extends EventEmitter {
       collectionInstance.save = (function(save) {
         return function(document) {
           const saveResult = save.apply(collectionInstance, arguments);
-          checkLargeDocInsert(document);
+          if (shouldCheckForLargeInsert()) {
+            checkLargeDocInsert(document);
+          }
           return saveResult;
         };
       })(collectionInstance.save);

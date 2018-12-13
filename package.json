@@ -16,9 +16,7 @@
   "devDependencies": {
     "async": "^2.1.2",
     "chai": "^3.5.0",
-    "lodash": "^4.16.6",
     "mocha": "~2.2.5",
-    "mongodb": "^2.2.11",
-    "randomstring": "^1.1.5"
+    "mongodb": "^2.2.11"
   }
 }
