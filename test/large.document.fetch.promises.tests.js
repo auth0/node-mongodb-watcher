@@ -3,7 +3,7 @@ const MongoWatcher = require('../');
 const assert       = require('chai').assert;
 const sizeOf       = require('object-sizeof');
 
-describe('large.document.fetch', function () {
+describe('large.document.fetch (returning promises)', function () {
   var db, collection, watcher, _id;
 
   function setupDb(cb) {
@@ -72,40 +72,36 @@ describe('large.document.fetch', function () {
         });
         after(cleanCollection);
 
-        it('should emit an event when retrieving a big document with findOne', function(done) {
+        it('should emit an event when retrieving a big document with findOne', function() {
           var eventData;
 
           watcher.once('large.document.fetch', (data) => {
             eventData = data;
           });
 
-          collection.findOne({ _id }, (err, doc) => {
-            if (err) { return done(err); }
+          return collection.findOne({ _id }).then((doc) => {
             assert.isOk(eventData);
             assert.equal(eventData.collection, 'large_doc_fetch');
             assert.equal(eventData.size, sizeOf(doc));
             assert.equal(eventData.documentId, doc._id);
             assert.equal(eventData.cmd.query._id, _id);
             assert.include(eventData.stack, __filename);
-            done();
           });
         });
 
-        it('should emit an event when retrieving a big document with find + toArray', function(done) {
+        it('should emit an event when retrieving a big document with find + toArray', function() {
           var eventData;
 
           watcher.once('large.document.fetch', (data) => {
             eventData = data;
           });
 
-          collection.find({ _id }).toArray((err, docs) => {
-            if (err) { return done(err); }
+          return collection.find({ _id }).toArray().then((docs) => {
             assert.isOk(eventData);
             assert.equal(eventData.collection, 'large_doc_fetch');
             assert.equal(eventData.size, sizeOf(docs[0]));
             assert.equal(eventData.documentId, docs[0]._id);
             assert.include(eventData.stack, __filename);
-            done();
           });
         });
       });
@@ -117,33 +113,29 @@ describe('large.document.fetch', function () {
         });
         after(cleanCollection);
 
-        it('should not emit any event when retrieving a big document with findOne', function(done) {
+        it('should not emit any event when retrieving a big document with findOne', function() {
           var eventData;
 
           watcher.once('large.document.fetch', (data) => {
             eventData = data;
           });
 
-          collection.findOne({ _id }, (err, doc) => {
-            if (err) { return done(err); }
+          return collection.findOne({ _id }).then((doc) => {
             assert.isUndefined(eventData);
             assert.isOk(doc);
-            done();
           });
         });
 
-        it('should not emit any event when retrieving a big document with find + toArray', function(done) {
+        it('should not emit any event when retrieving a big document with find + toArray', function() {
           var eventData;
 
           watcher.once('large.document.fetch', (data) => {
             eventData = data;
           });
 
-          collection.find({ _id }).toArray((err, docs) => {
-            if (err) { return done(err); }
+          return collection.find({ _id }).toArray().then((docs) => {
             assert.isUndefined(eventData);
             assert.isOk(docs);
-            done();
           });
         });
       });
@@ -151,23 +143,6 @@ describe('large.document.fetch', function () {
   });
 
   describe('when a custom check interval is used', function(){
-
-    describe('input validation', function(){
-      [
-        null,
-        undefined,
-        -1,
-        0,
-        Number.MAX_VALUE,
-        ['an-array'],
-        {},
-        'string'
-      ].forEach(function(interval){
-        it('should error for invalid value: ' + interval, function(){
-          assert.throw(() => new MongoWatcher(db, { largeFetchCheckInterval: interval }), /Interval must be a positive save integer, found: .*/);
-        });
-      });
-    });
 
     describe('event interval', function(){
       beforeEach(done => setUpWatcher({ largeFetchCheckInterval: 3 }, done));
@@ -181,107 +156,92 @@ describe('large.document.fetch', function () {
       afterEach(removeEventListeners);
       after(cleanCollection);
 
-      it('should emit only the first time of each interval when retrieving a big document with findOne', function(done){
+      it('should emit only the first time of each interval when retrieving a big document with findOne', function(){
         const events = [];
 
         watcher.on('large.document.fetch', (data) => {
           events.push(data);
         });
 
-        collection.findOne({ id: 'obj' }, (err, doc) => {
-          if (err) { return done(err); }
+        return collection.findOne({ id: 'obj' }).then((doc) => {
           assert.lengthOf(events, 1);
           assert.isOk(doc);
 
-          collection.findOne({ id: 'obj' }, (err, doc) => {
-            if (err) { return done(err); }
+          return collection.findOne({ id: 'obj' }).then((doc) => {
             assert.lengthOf(events, 1);
             assert.isOk(doc);
 
-            collection.findOne({ id: 'obj' }, (err, doc) => {
-              if (err) { return done(err); }
+            return collection.findOne({ id: 'obj' }).then((doc) => {
               assert.lengthOf(events, 1);
               assert.isOk(doc);
 
-              collection.findOne({ id: 'obj' }, (err, doc) => {
-                if (err) { return done(err); }
+              return collection.findOne({ id: 'obj' }).then((doc) => {
                 assert.lengthOf(events, 2);
                 assert.isOk(doc);
-                done();
               });
             });
           });
         });
       });
 
-      it('should emit the first time when retrieving a big document with find + toArray', function(done){
+      it('should emit the first time when retrieving a big document with find + toArray', function(){
         const events = [];
 
         watcher.on('large.document.fetch', (data) => {
           events.push(data);
         });
 
-        collection.find({ id: 'obj' }).toArray((err, docs) => {
-          if (err) { return done(err); }
+        return collection.find({ id: 'obj' }).toArray().then((docs) => {
           assert.lengthOf(docs, 4);
           // interval: X--X <- here, got 2 events ("X" means event sent)
           assert.lengthOf(events, 2);
 
-          collection.find({ id: 'obj' }).toArray((err, docs) => {
-            if (err) { return done(err); }
+          return collection.find({ id: 'obj' }).toArray().then((docs) => {
             assert.lengthOf(docs, 4);
             // interval: X--X--X- <- here, got 1 more events
             assert.lengthOf(events, 3);
 
-            collection.find({ id: 'obj' }).toArray((err, docs) => {
-              if (err) { return done(err); }
+            return collection.find({ id: 'obj' }).toArray().then((docs) => {
               assert.lengthOf(docs, 4);
               // interval: X--X--X--X-- <- here, got 1 more events
               assert.lengthOf(events, 4);
 
-              collection.find({ id: 'obj' }).toArray((err, docs) => {
-                if (err) { return done(err); }
+              return collection.find({ id: 'obj' }).toArray().then((docs) => {
                 assert.lengthOf(docs, 4);
                 // interval: X--X--X--X--X--X <- here, got 2 more events
                 assert.lengthOf(events, 6);
-                done();
               });
             });
           });
         });
       });
 
-      it('should emit the first time when retrieving a big document mixing findOne and find + toArray', function(done){
+      it('should emit the first time when retrieving a big document mixing findOne and find + toArray', function(){
         const events = [];
 
         watcher.on('large.document.fetch', (data) => {
           events.push(data);
         });
 
-        collection.find({ id: 'obj' }).toArray((err, docs) => {
-          if (err) { return done(err); }
+        return collection.find({ id: 'obj' }).toArray().then((docs) => {
           assert.lengthOf(docs, 4);
           // interval: X--X <- here, got 2 events ("X" means event sent)
           assert.lengthOf(events, 2);
 
-          collection.findOne({ id: 'obj' }, (err, doc) => {
-            if (err) { return done(err); }
+          return collection.findOne({ id: 'obj' }).then((doc) => {
             assert.isOk(doc);
             // interval: X--X- <- here, got none events
             assert.lengthOf(events, 2);
 
-            collection.find({ id: 'obj' }).toArray((err, docs) => {
-              if (err) { return done(err); }
+            return collection.find({ id: 'obj' }).toArray().then((docs) => {
               assert.lengthOf(docs, 4);
               // interval: X--X--X-- <- here, got 1 more event
               assert.lengthOf(events, 3);
 
-              collection.findOne({ id: 'obj' }, (err, doc) => {
-                if (err) { return done(err); }
+              return collection.findOne({ id: 'obj' }).then((doc) => {
                 assert.isOk(doc);
                 // interval: X--X--X--X <- here, got 1 more event
                 assert.lengthOf(events, 4);
-                done();
               });
             });
           });

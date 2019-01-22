@@ -28,7 +28,7 @@ describe('large.document.insert', function () {
       watcher.removeAllListeners();
     }
   };
-  const cleanCollection = done => collection.remove({}, done);
+  const cleanCollection = done => { collection.remove({}, done); };
   const buildObjectSlightlyBiggerThan = size => ({ id: 'obj', test: { withArray: [ 'a'.repeat(size/2) ] }}); // Each char is 2 bytes
   const buildObjectSmallerThan = size => ({ id: 'obj', test: { withArray: [ 'a'.repeat(size/10) ] }});
 
