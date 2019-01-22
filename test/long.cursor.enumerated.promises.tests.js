@@ -3,7 +3,7 @@ const async        = require('async');
 const MongoWatcher = require('../');
 const assert       = require('chai').assert;
 
-describe('long.cursor.enumeration', function () {
+describe('long.cursor.enumeration (returning promises)', function () {
   var db, collection, watcher;
 
   function setupDb(cb) {
@@ -73,7 +73,7 @@ describe('long.cursor.enumeration', function () {
             assert.include(data.stack, __filename);
             done();
           });
-          collection.find({ notFoo: { $exists: false} }).limit(500).toArray(() => {});
+          collection.find({ notFoo: { $exists: false} }).limit(500).toArray().then(() => {});
         });
       });
 
@@ -85,30 +85,13 @@ describe('long.cursor.enumeration', function () {
           watcher.once('long.cursor.enumeration', () => {
             done(new Error('this should not be called'));
           });
-          collection.find({}).limit(50).toArray(done);
+          collection.find({}).limit(50).toArray().then(() => { done(); });
         });
       });
     });
   });
 
   describe('when a custom check interval is used', function(){
-
-    describe('input validation', function(){
-      [
-        null,
-        undefined,
-        -1,
-        0,
-        Number.MAX_VALUE,
-        ['an-array'],
-        {},
-        'string'
-      ].forEach(function(interval){
-        it('should error for invalid value: ' + interval, function(){
-          assert.throw(() => new MongoWatcher(db, { longCursorCheckInterval: interval }), /Interval must be a positive save integer, found: .*/);
-        });
-      });
-    });
 
     describe('event interval', function(){
       beforeEach(done => setUpWatcher({ longCursorCheckInterval: 3 }, done));
@@ -117,37 +100,32 @@ describe('long.cursor.enumeration', function () {
       afterEach(removeEventListeners);
       afterEach(cleanCollection);
 
-      it('should emit only the first time of each interval when retrieving a big document lists', function(done){
+      it('should emit only the first time of each interval when retrieving a big document lists', function(){
         const events = [];
 
         watcher.on('long.cursor.enumeration', (data) => {
           events.push(data);
         });
 
-        collection.find({}).toArray((err, docs) => {
-          if (err) { return done(err); }
+        return collection.find({}).toArray().then((docs) => {
           assert.lengthOf(docs, docListLength);
           // interval: X <- here, got 1 event ("X" means event sent)
           assert.lengthOf(events, 1);
 
-          collection.find({}).toArray((err, docs) => {
-            if (err) { return done(err); }
+          return collection.find({}).toArray().then((docs) => {
             assert.lengthOf(docs, docListLength);
             // interval: X- <- here, got 0 more events
             assert.lengthOf(events, 1);
 
-            collection.find({}).toArray((err, docs) => {
-              if (err) { return done(err); }
+            return collection.find({}).toArray().then((docs) => {
               assert.lengthOf(docs, docListLength);
               // interval: X-- <- here, got 0 more events
               assert.lengthOf(events, 1);
 
-              collection.find({}).toArray((err, docs) => {
-                if (err) { return done(err); }
+              return collection.find({}).toArray().then((docs) => {
                 assert.lengthOf(docs, docListLength);
                 // interval: X--X <- here, got 1 more event
                 assert.lengthOf(events, 2);
-                done();
               });
             });
           });

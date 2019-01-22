@@ -125,8 +125,7 @@ class MongoWatcher extends EventEmitter {
 
             const getFormattedStack = captureStackTrace();
 
-            return toArray((err, documents) => {
-              if (err) { return callback(err); }
+            const runChecks = (documents) => {
               if (documents) {
                 if (runLongCursorCheck && documents.length > self._params.longCursorThreshold) {
                   self.emit('long.cursor.enumeration', {
@@ -145,8 +144,18 @@ class MongoWatcher extends EventEmitter {
                   }
                 });
               }
-              return callback(null, documents);
-            });
+            };
+
+            return typeof callback === 'function' ?
+              toArray((err, documents) => {
+                if (err) { return callback(err); }
+                runChecks(documents);
+                return callback(null, documents);
+              }) :
+              toArray().then((documents) => {
+                runChecks(documents);
+                return documents;
+              });
           };
         })(newCursor.toArray.bind(newCursor));
 
