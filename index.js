@@ -191,15 +191,40 @@ class MongoWatcher extends EventEmitter {
         };
       })(collectionInstance.insertMany);
 
-      collectionInstance.save = (function(save) {
-        return function(document) {
-          const saveResult = save.apply(collectionInstance, arguments);
-          if (shouldCheckForLargeInsert()) {
-            checkLargeDocInsert(document);
-          }
-          return saveResult;
-        };
-      })(collectionInstance.save);
+      const singleInsertionFunctions = [
+        'save',
+        'insertOne'
+      ];
+
+      singleInsertionFunctions.forEach((insertFnName) => {
+        collectionInstance[insertFnName] = (function(insertFn) {
+          return function(document) {
+            const insertionResult = insertFn.apply(collectionInstance, arguments);
+            if (shouldCheckForLargeInsert()) {
+              checkLargeDocInsert(document);
+            }
+            return insertionResult;
+          };
+        })(collectionInstance[insertFnName]);
+      });
+
+      const updateFunctions = [
+        'update',
+        'updateOne',
+        'updateMany'
+      ];
+
+      updateFunctions.forEach((updateFnName) => {
+        collectionInstance[updateFnName] = (function(updateFn) {
+          return function(query, document) {
+            const updateResult = updateFn.apply(collectionInstance, arguments);
+            if (shouldCheckForLargeInsert()) {
+              checkLargeDocInsert(document);
+            }
+            return updateResult;
+          };
+        })(collectionInstance[updateFnName]);
+      });
 
       return collectionInstance;
     }

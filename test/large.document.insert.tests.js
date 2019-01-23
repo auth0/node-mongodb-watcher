@@ -62,58 +62,89 @@ describe('large.document.insert', function () {
       after(cleanCollection);
       after(removeEventListeners);
 
+      const insertCases = [
+        {
+          name: 'save',
+          insertFn: (coll, doc, cb) => coll.save(doc, cb)
+        },
+        {
+          name: 'insert',
+          insertFn: (coll, doc, cb) => coll.insert(doc, cb)
+        },
+        {
+          name: 'insertOne',
+          insertFn: (coll, doc, cb) => coll.insertOne(doc, cb)
+        },
+        {
+          name: 'insertMany',
+          insertFn: (coll, doc, cb) => coll.insertMany([ doc ], cb)
+        }
+      ];
+
+      const updateCases = [
+        {
+          name: 'update',
+          insertFn: (coll, doc, cb) => coll.save({ id: 1 }, () => coll.update({ id: 1 }, doc, cb))
+        },
+        {
+          name: 'updateOne',
+          insertFn: (coll, doc, cb) => coll.save({ id: 1 }, () => coll.updateOne({ id: 1 }, doc, cb))
+        },
+        {
+          name: 'updateMany',
+          insertFn: (coll, doc, cb) => coll.save({ id: 1 }, () => coll.updateMany({ id: 1 }, { $set: doc }, cb)),
+          sizeOf: doc => sizeOf({ $set: doc })
+        }
+      ];
+
       describe('when object is bigger than threshold', function(){
-        it('should emit an event when inserting', function(done) {
-          const badDoc = buildObjectSlightlyBiggerThan(testCase.threshold);
+        insertCases.forEach(function(insertCase){
+          it(`should emit an event when inserting with ${insertCase.name}()`, function(done) {
+            const badDoc = buildObjectSlightlyBiggerThan(testCase.threshold);
 
-          watcher.once('large.document.insert', (data) => {
-            assert.isOk(badDoc._id);
-            assert.equal(data.collection, 'biginsert');
-            assert.equal(data.size, sizeOf(badDoc));
-            assert.equal(data.documentId, badDoc._id);
-            assert.include(data.stack, __filename);
-            done();
+            watcher.once('large.document.insert', (data) => {
+              assert.isOk(badDoc._id);
+              assert.equal(data.collection, 'biginsert');
+              assert.equal(data.size, sizeOf(badDoc));
+              assert.equal(data.documentId, badDoc._id);
+              assert.include(data.stack, __filename);
+              done();
+            });
+
+            insertCase.insertFn(collection, badDoc, () => {});
           });
-
-          collection.insert(badDoc, () => {});
         });
 
-        it('should emit an event when saving', function(done) {
-          const badDoc = buildObjectSlightlyBiggerThan(testCase.threshold);
+        updateCases.forEach(function(updateCase){
+          it(`should emit an event when updating with ${updateCase.name}()`, function(done) {
+            const badDoc = buildObjectSlightlyBiggerThan(testCase.threshold);
 
-          watcher.once('large.document.insert', (data) => {
-            assert.isOk(badDoc._id);
-            assert.equal(data.collection, 'biginsert');
-            assert.equal(data.size, sizeOf(badDoc));
-            assert.equal(data.documentId, badDoc._id);
-            assert.include(data.stack, __filename);
-            done();
+            watcher.once('large.document.insert', (data) => {
+              assert.isUndefined(badDoc._id); // the updates object usually don't have the
+              assert.isUndefined(data.documentId); // the updates object usually don't have the
+              assert.equal(data.collection, 'biginsert');
+              assert.equal(data.size, updateCase.sizeOf ? updateCase.sizeOf(badDoc) : sizeOf(badDoc));
+              assert.include(data.stack, __filename);
+              done();
+            });
+
+            updateCase.insertFn(collection, badDoc, () => {});
           });
-
-          collection.save(badDoc, () => {});
         });
       });
 
 
       describe('when object is smaller than threshold', function(){
-        it('should not emit the event when inserting', function(done) {
-          const goodDoc = buildObjectSmallerThan(testCase.threshold);
+        insertCases.concat(updateCases).forEach(function(insertCase){
+          it(`should not emit the event when executing ${insertCase.name}()`, function(done) {
+            const goodDoc = buildObjectSmallerThan(testCase.threshold);
 
-          watcher.once('large.document.insert', () => {
-            done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
+            watcher.once('large.document.insert', () => {
+              done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
+            });
+
+            insertCase.insertFn(collection, goodDoc, done);
           });
-
-          collection.insert(goodDoc, done);
-        });
-
-        it('should not emit the event when saving', function(done) {
-          const goodDoc = buildObjectSmallerThan(testCase.threshold);
-
-          watcher.once('large.document.insert', () => {
-            done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
-          });
-
-          collection.save(goodDoc, done);
         });
       });
     });
@@ -154,7 +185,7 @@ describe('large.document.insert', function () {
           events.push(data);
         });
 
-        collection.insert(buildBigDoc(), err => {
+        collection.save(buildBigDoc(), err => {
           assert.isNull(err);
           // interval: X <- here, got 1 event ("X" means event sent)
           assert.lengthOf(events, 1)
@@ -173,14 +204,20 @@ describe('large.document.insert', function () {
                 assert.isNull(err);
                 // interval: X--X-- <- here, got 0 events
                 assert.lengthOf(events, 2)
-                done();
+
+                collection.insertOne(buildBigDoc(), err => {
+                  assert.isNull(err);
+                  // interval: X--X--X <- here, got 1 events
+                  assert.lengthOf(events, 3)
+                  done();
+                });
               });
             });
           });
         });
       });
 
-      it('should emit only the first time of each interval when saving a big document', function(done){
+      it('should emit only the first time of each interval when updating a big document', function(done){
         const events = [];
 
         watcher.on('large.document.insert', (data) => {
@@ -192,60 +229,21 @@ describe('large.document.insert', function () {
           // interval: X <- here, got 1 event ("X" means event sent)
           assert.lengthOf(events, 1)
 
-          collection.save(buildBigDoc(), err => {
+          collection.update({ id: 'obj' }, buildBigDoc(), err => {
             assert.isNull(err, err);
             // interval: X- <- here, got 0 events
             assert.lengthOf(events, 1)
 
-            collection.save(buildBigDoc(), err => {
+            collection.updateOne({ id: 'obj' }, buildBigDoc(), err => {
               assert.isNull(err);
               // interval: X-- <- here, got 0 events
               assert.lengthOf(events, 1)
 
-              collection.save(buildBigDoc(), err => {
+              collection.updateMany({ id: 'obj' }, { $set: buildBigDoc() }, err => {
                 assert.isNull(err);
                 // interval: X--X <- here, got 1 event
                 assert.lengthOf(events, 2)
                 done();
-              });
-            });
-          });
-        });
-      });
-
-      it('should emit only the first time of each interval mixing inserting and saving big documents', function(done){
-        const events = [];
-
-        watcher.on('large.document.insert', (data) => {
-          events.push(data);
-        });
-
-        collection.insertMany([ buildBigDoc(), buildBigDoc() ], err => {
-          assert.isNull(err);
-          // interval: X- <- here, got 1 event ("X" means event sent)
-          assert.lengthOf(events, 1)
-
-          collection.insert(buildBigDoc(), err => {
-            assert.isNull(err, err);
-            // interval: X-- <- here, got 0 events
-            assert.lengthOf(events, 1)
-
-            collection.save(buildBigDoc(), err => {
-              assert.isNull(err);
-              // interval: X--X <- here, got 1 event
-              assert.lengthOf(events, 2)
-
-              collection.insert(buildBigDoc(), err => {
-                assert.isNull(err);
-                // interval: X--X- <- here, got 0 events
-                assert.lengthOf(events, 2)
-
-                collection.insertMany([ buildBigDoc(), buildBigDoc() ], err => {
-                  assert.isNull(err);
-                  // interval: X--X--X <- here, got 1 event
-                  assert.lengthOf(events, 3)
-                  done();
-                });
               });
             });
           });
