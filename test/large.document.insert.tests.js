@@ -135,15 +135,15 @@ describe('large.document.insert', function () {
 
 
       describe('when object is smaller than threshold', function(){
-        insertCases.concat(updateCases).forEach(function(insertCase){
-          it(`should not emit the event when executing ${insertCase.name}()`, function(done) {
+        insertCases.concat(updateCases).forEach(function(testCase){
+          it(`should not emit the event when executing ${testCase.name}()`, function(done) {
             const goodDoc = buildObjectSmallerThan(testCase.threshold);
 
             watcher.once('large.document.insert', () => {
               done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
             });
 
-            insertCase.insertFn(collection, goodDoc, done);
+            testCase.insertFn(collection, goodDoc, done);
           });
         });
       });
