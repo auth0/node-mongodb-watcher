@@ -3,7 +3,7 @@ const MongoWatcher = require('../');
 const assert       = require('chai').assert;
 const sizeOf       = require('object-sizeof');
 
-describe('large.document.insert', function () {
+describe('large.document.insert (returning promises)', function () {
   var db, collection, watcher;
 
   function setupDb(cb) {
@@ -65,34 +65,34 @@ describe('large.document.insert', function () {
       const insertCases = [
         {
           name: 'save',
-          insertFn: (coll, doc, cb) => coll.save(doc, cb)
+          insertFn: (coll, doc) => coll.save(doc)
         },
         {
           name: 'insert',
-          insertFn: (coll, doc, cb) => coll.insert(doc, cb)
+          insertFn: (coll, doc) => coll.insert(doc)
         },
         {
           name: 'insertOne',
-          insertFn: (coll, doc, cb) => coll.insertOne(doc, cb)
+          insertFn: (coll, doc) => coll.insertOne(doc)
         },
         {
           name: 'insertMany',
-          insertFn: (coll, doc, cb) => coll.insertMany([ doc ], cb)
+          insertFn: (coll, doc) => coll.insertMany([ doc ])
         }
       ];
 
       const updateCases = [
         {
           name: 'update',
-          insertFn: (coll, doc, cb) => coll.save({ id: 1 }, () => coll.update({ id: 1 }, doc, cb))
+          insertFn: (coll, doc) => coll.save({ id: 1 }, () => coll.update({ id: 1 }, doc))
         },
         {
           name: 'updateOne',
-          insertFn: (coll, doc, cb) => coll.save({ id: 1 }, () => coll.updateOne({ id: 1 }, doc, cb))
+          insertFn: (coll, doc) => coll.save({ id: 1 }, () => coll.updateOne({ id: 1 }, doc))
         },
         {
           name: 'updateMany',
-          insertFn: (coll, doc, cb) => coll.save({ id: 1 }, () => coll.updateMany({ id: 1 }, { $set: doc }, cb)),
+          insertFn: (coll, doc) => coll.save({ id: 1 }, () => coll.updateMany({ id: 1 }, { $set: doc })),
           sizeOf: doc => sizeOf({ $set: doc })
         }
       ];
@@ -111,7 +111,7 @@ describe('large.document.insert', function () {
               done();
             });
 
-            insertCase.insertFn(collection, badDoc, () => {});
+            insertCase.insertFn(collection, badDoc);
           });
         });
 
@@ -128,7 +128,7 @@ describe('large.document.insert', function () {
               done();
             });
 
-            updateCase.insertFn(collection, badDoc, () => {});
+            updateCase.insertFn(collection, badDoc);
           });
         });
       });
@@ -136,14 +136,14 @@ describe('large.document.insert', function () {
 
       describe('when object is smaller than threshold', function(){
         insertCases.concat(updateCases).forEach(function(testCase){
-          it(`should not emit the event when executing ${testCase.name}()`, function(done) {
+          it(`should not emit the event when executing ${testCase.name}()`, function() {
             const goodDoc = buildObjectSmallerThan(testCase.threshold);
 
             watcher.once('large.document.insert', () => {
               done(new Error('this should not be emitted the document is ' + sizeOf(goodDoc)));
             });
 
-            testCase.insertFn(collection, goodDoc, done);
+            return testCase.insertFn(collection, goodDoc);
           });
         });
       });
@@ -151,24 +151,6 @@ describe('large.document.insert', function () {
   });
 
   describe('when a custom check interval is used', function(){
-
-    describe('input validation', function(){
-
-      [
-        null,
-        undefined,
-        -1,
-        0,
-        Number.MAX_VALUE,
-        ['an-array'],
-        {},
-        'string'
-      ].forEach(function(interval){
-        it('should error for invalid value: ' + interval, function(){
-          assert.throw(() => new MongoWatcher(db, { largeInsertCheckInterval: interval }), /Interval must be a positive save integer, found: .*/);
-        });
-      });
-    });
 
     describe('event intervals', function(){
       beforeEach(function(done){
@@ -178,38 +160,32 @@ describe('large.document.insert', function () {
 
       const buildBigDoc = () => buildObjectSlightlyBiggerThan(defaultThreshold);
 
-      it('should emit only the first time of each interval when inserting a big document', function(done){
+      it('should emit only the first time of each interval when inserting a big document', function(){
         const events = [];
 
         watcher.on('large.document.insert', (data) => {
           events.push(data);
         });
 
-        collection.save(buildBigDoc(), err => {
-          assert.isNull(err);
+        return collection.save(buildBigDoc()).then(() => {
           // interval: X <- here, got 1 event ("X" means event sent)
           assert.lengthOf(events, 1)
 
-          collection.insertMany([ buildBigDoc(), buildBigDoc() ], err => {
-            assert.isNull(err, err);
+          return collection.insertMany([ buildBigDoc(), buildBigDoc() ]).then(() => {
             // interval: X-- <- here, got 0 events
             assert.lengthOf(events, 1)
 
-            collection.insertMany([ buildBigDoc(), buildBigDoc() ], err => {
-              assert.isNull(err);
+            return collection.insertMany([ buildBigDoc(), buildBigDoc() ]).then(() => {
               // interval: X--X- <- here, got 1 event
               assert.lengthOf(events, 2)
 
-              collection.insert(buildBigDoc(), err => {
-                assert.isNull(err);
+              return collection.insert(buildBigDoc()).then(() => {
                 // interval: X--X-- <- here, got 0 events
                 assert.lengthOf(events, 2)
 
-                collection.insertOne(buildBigDoc(), err => {
-                  assert.isNull(err);
+                return collection.insertOne(buildBigDoc()).then(() => {
                   // interval: X--X--X <- here, got 1 events
                   assert.lengthOf(events, 3)
-                  done();
                 });
               });
             });
@@ -217,33 +193,28 @@ describe('large.document.insert', function () {
         });
       });
 
-      it('should emit only the first time of each interval when updating a big document', function(done){
+      it('should emit only the first time of each interval when updating a big document', function(){
         const events = [];
 
         watcher.on('large.document.insert', (data) => {
           events.push(data);
         });
 
-        collection.save(buildBigDoc(), err => {
-          assert.isNull(err);
+        return collection.save(buildBigDoc()).then(() => {
           // interval: X <- here, got 1 event ("X" means event sent)
           assert.lengthOf(events, 1)
 
-          collection.update({ id: 'obj' }, buildBigDoc(), err => {
-            assert.isNull(err, err);
+          return collection.update({ id: 'obj' }, buildBigDoc()).then(() => {
             // interval: X- <- here, got 0 events
             assert.lengthOf(events, 1)
 
-            collection.updateOne({ id: 'obj' }, buildBigDoc(), err => {
-              assert.isNull(err);
+            return collection.updateOne({ id: 'obj' }, buildBigDoc()).then(() => {
               // interval: X-- <- here, got 0 events
               assert.lengthOf(events, 1)
 
-              collection.updateMany({ id: 'obj' }, { $set: buildBigDoc() }, err => {
-                assert.isNull(err);
+              return collection.updateMany({ id: 'obj' }, { $set: buildBigDoc() }).then(() => {
                 // interval: X--X <- here, got 1 event
                 assert.lengthOf(events, 2)
-                done();
               });
             });
           });
