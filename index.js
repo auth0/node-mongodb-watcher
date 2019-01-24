@@ -191,40 +191,27 @@ class MongoWatcher extends EventEmitter {
         };
       })(collectionInstance.insertMany);
 
-      const singleInsertionFunctions = [
-        'save',
-        'insertOne'
-      ];
+      const getDocumentFromInsert = (document) => document;
+      const getDocumentFromUpdate = (query, document) => document;
 
-      singleInsertionFunctions.forEach((insertFnName) => {
-        collectionInstance[insertFnName] = (function(insertFn) {
-          return function(document) {
-            const insertionResult = insertFn.apply(collectionInstance, arguments);
+      function patchSingleInsertion(fn, getDocument) {
+        collectionInstance[fn] = (function(insertFn) {
+          return function() {
+            const document = getDocument.apply(null, arguments);
+            const result = insertFn.apply(collectionInstance, arguments);
             if (shouldCheckForLargeInsert()) {
               checkLargeDocInsert(document);
             }
-            return insertionResult;
+            return result;
           };
-        })(collectionInstance[insertFnName]);
-      });
+        })(collectionInstance[fn]);
+      }
 
-      const updateFunctions = [
-        'update',
-        'updateOne',
-        'updateMany'
-      ];
-
-      updateFunctions.forEach((updateFnName) => {
-        collectionInstance[updateFnName] = (function(updateFn) {
-          return function(query, document) {
-            const updateResult = updateFn.apply(collectionInstance, arguments);
-            if (shouldCheckForLargeInsert()) {
-              checkLargeDocInsert(document);
-            }
-            return updateResult;
-          };
-        })(collectionInstance[updateFnName]);
-      });
+      patchSingleInsertion('save', getDocumentFromInsert);
+      patchSingleInsertion('insertOne', getDocumentFromInsert);
+      patchSingleInsertion('update', getDocumentFromUpdate);
+      patchSingleInsertion('updateOne', getDocumentFromUpdate);
+      patchSingleInsertion('updateMany', getDocumentFromUpdate);
 
       return collectionInstance;
     }
