@@ -16,7 +16,7 @@
   "devDependencies": {
     "async": "^2.1.2",
     "chai": "^3.5.0",
-    "mocha": "^5.2.0",
+    "mocha": "^11.7.6",
     "mongodb": "^2.2.11"
   }
 }
